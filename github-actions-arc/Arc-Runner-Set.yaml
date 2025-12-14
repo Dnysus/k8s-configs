@@ -75,7 +75,7 @@ spec:
                   - key: app.kubernetes.io/part-of
                     operator: In
                     values:
-                      - gha-runner-scale-set
+                      - gha-rs
               topologyKey: kubernetes.io/hostname
       containers:
         - command:
