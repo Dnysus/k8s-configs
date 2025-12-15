@@ -1,15 +1,29 @@
-name: Yaml Lint
+# .github/workflows/yaml-lint.yaml
+name: YAML Lint
+
 on: 
   pull_request:
     types: [opened, edited, synchronize, reopened] # yamllint disable-line rule:truthy
   push:
+    paths:
+      - '**/*.yaml'
+      - '**/*.yml'
+
 jobs:
-  lintAllTheThings:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: yaml-lint
+      
+      - name: YAML Lint
         uses: ibiqlik/action-yamllint@v3
         with:
-          config_file: .yamllint.yml
-          file_or_dir: .
+          config_data: |
+            extends: default
+            rules:
+              line-length:
+                max: 200
+              truthy:
+                check-keys: false
+              comments:
+                min-spaces-from-content: 1
