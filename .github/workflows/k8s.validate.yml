@@ -1,8 +1,11 @@
 # .github/workflows/k8s-validate.yaml
 name: Kubernetes Validation
 
-on:
+on: 
   pull_request:
+    branches: [opened, edited, synchronize, reopened] # yamllint disable-line rule:truthy
+  push:
+    branches: [main]
     paths:
       - '**/*.yaml'
 
