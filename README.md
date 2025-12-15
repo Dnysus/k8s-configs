@@ -9,9 +9,11 @@ This repo serves as a "parts bin" for Kubernetes clusters. Instead of rewriting 
 * **Base cluster configurations:** Essential setups for new clusters.
 * **Common application manifests:** Templates for Ingress, Monitoring, and Logging.
 * **Reusable templates:** Standard Service and Deployment definitions.
+* **[GitHub Actions ARC (AWS EKS)](./github-actions-arc(aws-eks)/):** Self-hosted GitHub Actions runners on EKS with cost-optimized node scheduling.
 
 ### 🚀 Usage
 Browse the folders, find the component you need, and run:
 
 ```bash
 kubectl apply -f <filename>.yaml
+```

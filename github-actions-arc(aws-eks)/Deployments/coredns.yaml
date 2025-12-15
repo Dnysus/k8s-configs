@@ -1,0 +1,144 @@
+# CoreDNS Deployment
+#
+# This deployment is configured to run on system nodes (workload-type: system)
+# for cost-efficient 24/7 operation alongside the ARC listener.
+#
+# Note: The image below is the AWS EKS managed CoreDNS image.
+# For non-EKS clusters, use: coredns/coredns:1.12.4
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coredns
+  namespace: kube-system
+  labels:
+    eks.amazonaws.com/component: coredns
+    k8s-app: kube-dns
+    kubernetes.io/name: CoreDNS
+  annotations:
+    cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      eks.amazonaws.com/component: coredns
+      k8s-app: kube-dns
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 25%
+  template:
+    metadata:
+      labels:
+        eks.amazonaws.com/component: coredns
+        k8s-app: kube-dns
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
+    spec:
+      serviceAccountName: coredns
+      priorityClassName: system-cluster-critical
+      dnsPolicy: Default
+      containers:
+        - name: coredns
+          # AWS EKS managed image - for non-EKS use: coredns/coredns:1.12.4
+          image: 602401143452.dkr.ecr.{your-region}.amazonaws.com/eks/coredns:v1.12.4-eksbuild.1  # <-- REPLACE {your-region}
+          args:
+            - '-conf'
+            - /etc/coredns/Corefile
+          ports:
+            - name: dns
+              containerPort: 53
+              protocol: UDP
+            - name: dns-tcp
+              containerPort: 53
+              protocol: TCP
+            - name: metrics
+              containerPort: 9153
+              protocol: TCP
+          resources:
+            limits:
+              memory: 170Mi
+            requests:
+              cpu: 100m
+              memory: 70Mi
+          volumeMounts:
+            - name: config-volume
+              readOnly: true
+              mountPath: /etc/coredns
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+            periodSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8181
+              scheme: HTTP
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            capabilities:
+              add:
+                - NET_BIND_SERVICE
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: config-volume
+          configMap:
+            name: coredns
+            items:
+              - key: Corefile
+                path: Corefile
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - linux
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+                      - arm64
+                  - key: workload-type
+                    operator: In
+                    values:
+                      - system
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: k8s-app
+                      operator: In
+                      values:
+                        - kube-dns
+                topologyKey: kubernetes.io/hostname
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
+        - key: CriticalAddonsOnly
+          operator: Exists
+        - key: workload-type
+          operator: Equal
+          value: system
+          effect: NoSchedule
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              k8s-app: kube-dns

@@ -1,0 +1,136 @@
+# Metrics Server Deployment
+#
+# This deployment is configured to run on system nodes (workload-type: system)
+# for cost-efficient 24/7 operation alongside the ARC listener.
+#
+# Note: The image below is the AWS EKS managed metrics-server image.
+# For non-EKS clusters, use: registry.k8s.io/metrics-server/metrics-server:v0.7.2
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-server
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/instance: metrics-server
+    app.kubernetes.io/managed-by: EKS
+    app.kubernetes.io/name: metrics-server
+    app.kubernetes.io/version: 0.7.2
+  annotations:
+    cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: metrics-server
+      app.kubernetes.io/name: metrics-server
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 25%
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: metrics-server
+        app.kubernetes.io/name: metrics-server
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'true'
+    spec:
+      serviceAccountName: metrics-server
+      priorityClassName: system-cluster-critical
+      containers:
+        - name: metrics-server
+          # AWS EKS managed image - for non-EKS use: registry.k8s.io/metrics-server/metrics-server:v0.7.2
+          image: 602401143452.dkr.ecr.{your-region}.amazonaws.com/eks/metrics-server:v0.8.0-eksbuild.3  # <-- REPLACE {your-region} 
+          args:
+            - '--secure-port=10251'
+            - '--cert-dir=/tmp'
+            - '--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname'
+            - '--kubelet-use-node-status-port'
+            - '--metric-resolution=15s'
+          ports:
+            - name: https
+              containerPort: 10251
+              protocol: TCP
+          resources:
+            limits:
+              memory: 400Mi
+            requests:
+              cpu: 100m
+              memory: 200Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: https
+              scheme: HTTPS
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: https
+              scheme: HTTPS
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
+            runAsUser: 1000
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                      - linux
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                      - amd64
+                      - arm64
+                  - key: workload-type
+                    operator: In
+                    values:
+                      - system
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/name
+                      operator: In
+                      values:
+                        - metrics-server
+                topologyKey: kubernetes.io/hostname
+      tolerations:
+        - key: CriticalAddonsOnly
+          operator: Exists
+        - key: workload-type
+          operator: Equal
+          value: system
+          effect: NoSchedule
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/instance: metrics-server
+              app.kubernetes.io/name: metrics-server
