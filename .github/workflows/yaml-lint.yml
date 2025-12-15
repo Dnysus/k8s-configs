@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [opened, edited, synchronize, reopened] # yamllint disable-line rule:truthy
   push:
-    branches: [main]
+    branches: ["main"]
 jobs:
   lintAllTheThings:
     runs-on: ubuntu-latest
