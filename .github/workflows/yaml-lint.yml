@@ -1,0 +1,16 @@
+name: Yaml Lint
+on: 
+  pull_request:
+    types: [opened, edited, synchronize, reopened] # yamllint disable-line rule:truthy
+  push:
+    branches: ["main"]
+jobs:
+  lintAllTheThings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: yaml-lint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_file: .yamllint.yml
+          file_or_dir: .
